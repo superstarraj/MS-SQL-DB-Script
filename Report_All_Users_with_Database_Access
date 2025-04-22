@@ -1,0 +1,117 @@
+
+--Generic Script: Report All Users with Database Access
+-- Table to hold the results
+IF OBJECT_ID('tempdb..#UserAccessReport') IS NOT NULL DROP TABLE #UserAccessReport;
+CREATE TABLE #UserAccessReport (
+    DatabaseName SYSNAME,
+    UserName SYSNAME,
+    LoginName SYSNAME NULL,
+    Type_Desc NVARCHAR(60),
+    DefaultSchema SYSNAME
+);
+
+-- Variables for dynamic SQL
+DECLARE @SQL NVARCHAR(MAX);
+DECLARE @DBName SYSNAME;
+
+-- Cursor to loop through databases
+DECLARE db_cursor CURSOR FOR
+SELECT name FROM sys.databases
+WHERE state_desc = 'ONLINE'
+  AND name NOT IN ('master', 'tempdb', 'model', 'msdb');
+
+OPEN db_cursor;
+FETCH NEXT FROM db_cursor INTO @DBName;
+
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @SQL = '
+    USE [' + QUOTENAME(@DBName) + '];
+
+    INSERT INTO #UserAccessReport
+    SELECT
+        DB_NAME() AS DatabaseName,
+        dp.name AS UserName,
+        sp.name AS LoginName,
+        dp.type_desc,
+        dp.default_schema_name
+    FROM sys.database_principals dp
+    LEFT JOIN sys.server_principals sp ON dp.sid = sp.sid
+    WHERE dp.type IN (''S'', ''U'', ''G'') -- SQL user, Windows user, Windows group
+      AND dp.name NOT LIKE ''##%''  -- Skip system-generated certificates/logins
+      AND dp.name NOT IN (''dbo'', ''guest'', ''INFORMATION_SCHEMA'', ''sys'');
+    ';
+
+    EXEC sp_executesql @SQL;
+
+    FETCH NEXT FROM db_cursor INTO @DBName;
+END
+
+CLOSE db_cursor;
+DEALLOCATE db_cursor;
+
+-- Final result
+SELECT * FROM #UserAccessReport
+ORDER BY DatabaseName, UserName;
+
+-- Optional: export to CSV from SSMS or use SQL Server Agent job to save to file
+
+
+/*
+
+SQL Server – Report Users with Database Access Across All Databases
+====================================================================
+
+Description
+-----------
+This script provides a comprehensive report of all users across all online databases 
+in a SQL Server instance. It captures:
+
+- Which users exist in which databases
+- Their associated server-level logins (if any)
+- Their type (SQL login, Windows login, group, etc.)
+- Their default schema
+
+No need to pre-specify usernames or email addresses. This is helpful for audits, 
+security reviews, and access compliance across all environments.
+
+How It Works
+------------
+The script:
+- Iterates through each online user database (excluding system DBs)
+- Queries each database's sys.database_principals
+- Maps to corresponding server-level login (via sys.server_principals)
+- Filters out system users (e.g., dbo, guest, etc.)
+- Inserts the result into a temporary table for final review
+
+Output Columns
+--------------
+| Column         | Description                                                  |
+|----------------|--------------------------------------------------------------|
+| DatabaseName   | Name of the database                                          |
+| UserName       | Name of the user in the database                             |
+| LoginName      | Server login mapped to the database user (if any)            |
+| Type_Desc      | User type (SQL_USER, WINDOWS_USER, WINDOWS_GROUP)            |
+| DefaultSchema  | Default schema associated with the user                      |
+
+Usage
+-----
+1. Open SQL Server Management Studio (SSMS).
+2. Connect to your SQL Server instance.
+3. Run the script on the master database or any accessible DB.
+4. Review the output or export results to Excel/CSV.
+
+Security Notes
+--------------
+- Script only reads metadata; it does not alter users or roles.
+- Can be safely executed in production.
+- Easily modified to filter only domain-specific users, like:
+  WHERE dp.name LIKE '%@powerschool.com%'
+
+Version History
+---------------
+| Version | Date       | Notes                            |
+|---------|------------|----------------------------------|
+| 1.0     | 2025-04-22 | Initial release of generic audit script |
+
+*/
