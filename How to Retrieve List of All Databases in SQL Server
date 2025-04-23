@@ -1,0 +1,3 @@
+--How to Retrieve List of All Databases in SQL Server
+
+EXEC sp_helpdb
