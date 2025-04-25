@@ -1,0 +1,4 @@
+--Query 2: How to Display Text of a Stored Procedure, Trigger, or View in SQL Server
+--The following SQL query gets the display text of a stored procedure, trigger, or view on SQL Server.
+
+exec sp_helptext @objname = 'Object_Name'
