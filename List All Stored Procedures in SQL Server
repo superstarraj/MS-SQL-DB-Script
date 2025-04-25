@@ -1,0 +1,10 @@
+--Query 3: How to List All Stored Procedures in SQL Server 
+--The following SQL query gets a list of all stored procedures in a SQL Server database.
+
+SELECT DISTINCT o.name, o.xtype
+
+FROM syscomments c
+
+INNER JOIN sysobjects o ON c.id=o.id
+
+WHERE o.xtype='P'
